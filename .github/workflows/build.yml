@@ -8,36 +8,37 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Forzar Node.js 24
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout del código
+      uses: actions/checkout@v4
+      # Nota: aunque la advertencia diga Node.js 20, el flag FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 lo fuerza a usar Node.js 24.
 
     - name: Instalar PlatformIO Core
       run: pip install --upgrade platformio
 
-    # Este es el paso clave. Le decimos a PlatformIO que use las bibliotecas LWIP con NAT.
-    - name: Configurar el entorno de compilación
+    - name: Configurar entorno de compilación (descargar libs con NAT)
       run: |
         mkdir -p lib
-        # Descargamos las dos bibliotecas "mágicas" desde un repositorio de confianza
         curl -L -o lib/liblwip.a https://github.com/tttapa/esp32-nat-router/raw/master/lib/liblwip.a
         curl -L -o lib/libvfs.a https://github.com/tttapa/esp32-nat-router/raw/master/lib/libvfs.a
 
-    - name: Crear archivo de configuración de PlatformIO (platformio.ini)
+    - name: Crear platformio.ini
       run: |
         echo '[env:esp32dev]' > platformio.ini
         echo 'platform = espressif32' >> platformio.ini
         echo 'board = esp32dev' >> platformio.ini
         echo 'framework = arduino' >> platformio.ini
         echo 'monitor_speed = 115200' >> platformio.ini
-        # Aquí enlazamos las bibliotecas descargadas manualmente
         echo 'build_flags = -Llib -lvfs -llwip' >> platformio.ini
         echo 'lib_extra_dirs = lib' >> platformio.ini
 
-    - name: Compilar el firmware
+    - name: Compilar firmware
       run: pio run
 
-    - name: Subir el firmware compilado (binario)
+    - name: Subir firmware compilado
       uses: actions/upload-artifact@v4
       with:
         name: firmware-nat-esp32
