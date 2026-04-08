@@ -188,7 +188,7 @@ void nvs_init() {
     ESP_ERROR_CHECK(ret);
 }
 
-// Manejador de eventos WiFi
+// Manejador de eventos WiFi (mejorado con motivo de desconexión)
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
 {
@@ -196,9 +196,11 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         sta_connected = true;
         ESP_LOGI(TAG, "STA conectado al router STARLINK");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t*) event_data;
+        ESP_LOGE(TAG, "STA desconectado, razón: %d", disconn->reason);
         sta_connected = false;
         sta_got_ip = false;
-        ESP_LOGI(TAG, "STA desconectado del router, reintentando...");
+        ESP_LOGI(TAG, "Reintentando conexión a STARLINK...");
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
@@ -222,12 +224,12 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station (conexión a internet) - ¡VERIFICA SSID Y PASSWORD!
+    // Configuración Station (conexión a internet)
     wifi_config_t sta_config = {
         .sta = {
             .ssid = "STARLINK",
             .password = "Pauli2807",
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+            .threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK,  // Puedes cambiarlo a WPA2_WPA3_PSK si el router lo requiere
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
@@ -240,7 +242,7 @@ void wifi_init_softap_sta(void) {
             .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .password = EXAMPLE_ESP_WIFI_PASS,
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK,
+            .authmode = WIFI_AUTH_WPA2_WPA3_PSK,
             .max_connection = EXAMPLE_MAX_STA_CONN,
         },
     };
@@ -250,6 +252,43 @@ void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
 
+    // Escaneo de redes WiFi (para diagnosticar visibilidad y autenticación)
+    ESP_LOGI(TAG, "Iniciando escaneo de redes WiFi (duración ~1s)...");
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time = { .active = 1000, .passive = 500 }
+    };
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
+    uint16_t ap_count = 0;
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_LOGI(TAG, "Redes encontradas: %d", ap_count);
+    if (ap_count > 0) {
+        wifi_ap_record_t *ap_records = malloc(sizeof(wifi_ap_record_t) * ap_count);
+        ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
+        for (int i = 0; i < ap_count; i++) {
+            ESP_LOGI(TAG, "SSID: %s, RSSI: %d, Auth: %s (%d)", 
+                     ap_records[i].ssid, ap_records[i].rssi, 
+                     auth_mode_to_string(ap_records[i].authmode), ap_records[i].authmode);
+            // Verificar si es nuestro router
+            if (strcmp((char*)ap_records[i].ssid, "STARLINK") == 0) {
+                ESP_LOGI(TAG, ">>> Router STARLINK detectado con autenticación %s", auth_mode_to_string(ap_records[i].authmode));
+                // Si el modo de autenticación detectado es diferente al configurado, sugerir cambio
+                if (ap_records[i].authmode != sta_config.sta.threshold.authmode) {
+                    ESP_LOGW(TAG, "¡El router usa %s pero configuraste %s! Cambia threshold.authmode en el código.", 
+                             auth_mode_to_string(ap_records[i].authmode), 
+                             auth_mode_to_string(sta_config.sta.threshold.authmode));
+                }
+            }
+        }
+        free(ap_records);
+    } else {
+        ESP_LOGW(TAG, "No se encontraron redes. ¿El WiFi está activo?");
+    }
+
     // Esperar a que la STA se conecte y obtenga IP (máximo 30 segundos)
     int retry = 0;
     while (!sta_got_ip && retry < 30) {
@@ -257,7 +296,7 @@ void wifi_init_softap_sta(void) {
         retry++;
     }
     if (!sta_got_ip) {
-        ESP_LOGE(TAG, "No se pudo conectar al router STARLINK. Verifique SSID y password.");
+        ESP_LOGE(TAG, "No se pudo conectar al router STARLINK. Verifique SSID y password, y que la banda sea 2.4 GHz.");
         // Continuar sin internet, pero el AP sigue activo
     } else {
         ESP_LOGI(TAG, "Conexión a STARLINK establecida con éxito");
