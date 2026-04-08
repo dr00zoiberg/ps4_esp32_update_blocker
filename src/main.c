@@ -22,11 +22,9 @@
 
 static const char *TAG = "ESP32_ROUTER";
 
-// Variables de estado para la conexión STA
 static bool sta_connected = false;
 static bool sta_got_ip = false;
 
-// --- Lista de bloqueo con comodines (*) ---
 const char* blocked_domains[] = {
     "f01.ps4.update.playstation.net",
     "h01.ps4.update.playstation.net",
@@ -119,7 +117,6 @@ const char* blocked_domains[] = {
 };
 #define NUM_BLOCKED_DOMAINS (sizeof(blocked_domains) / sizeof(blocked_domains[0]))
 
-// Función auxiliar para convertir modo de autenticación a cadena
 static const char* auth_mode_to_string(wifi_auth_mode_t mode) {
     switch (mode) {
         case WIFI_AUTH_OPEN: return "OPEN";
@@ -134,7 +131,6 @@ static const char* auth_mode_to_string(wifi_auth_mode_t mode) {
     }
 }
 
-// Función para comprobar coincidencia con comodín (*)
 bool matches_pattern(const char *domain, const char *pattern) {
     const char *d = domain;
     const char *p = pattern;
@@ -156,7 +152,6 @@ bool matches_pattern(const char *domain, const char *pattern) {
            (*d == '\0' && *p == '\0');
 }
 
-// Función de bloqueo
 bool check_and_block_domain(const char *name) {
     for (int i = 0; i < NUM_BLOCKED_DOMAINS; i++) {
         if (matches_pattern(name, blocked_domains[i])) {
@@ -168,7 +163,6 @@ bool check_and_block_domain(const char *name) {
     return false;
 }
 
-// Inicializar DNS
 void initialize_dns_blocking() {
     ip_addr_t dns1, dns2;
     ipaddr_aton("8.8.8.8", &dns1);
@@ -178,7 +172,6 @@ void initialize_dns_blocking() {
     ESP_LOGI(TAG, "DNS configurado: 8.8.8.8 y 8.8.4.4");
 }
 
-// Inicializar NVS
 void nvs_init() {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -188,7 +181,6 @@ void nvs_init() {
     ESP_ERROR_CHECK(ret);
 }
 
-// Manejador de eventos WiFi (mejorado con motivo de desconexión)
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
 {
@@ -209,12 +201,10 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-// Configuración WiFi como Station + AP
 void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Registrar manejador de eventos
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
@@ -224,18 +214,16 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station (conexión a internet) - AHORA CON WPA2_PSK (coincide con el router)
     wifi_config_t sta_config = {
         .sta = {
             .ssid = "STARLINK",
             .password = "Pauli2807",
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,   // Cambiado a WPA2_PSK
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
     ESP_LOGI(TAG, "Autenticación para conectarse a STARLINK: %s", auth_mode_to_string(sta_config.sta.threshold.authmode));
 
-    // Configuración Access Point
     wifi_config_t ap_config = {
         .ap = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -252,41 +240,8 @@ void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
 
-    // INICIAR EXPLÍCITAMENTE LA CONEXIÓN STA
+    // Iniciar conexión STA
     ESP_ERROR_CHECK(esp_wifi_connect());
-
-    // Escaneo de redes WiFi (para diagnóstico)
-    ESP_LOGI(TAG, "Iniciando escaneo de redes WiFi (duración ~1s)...");
-    wifi_scan_config_t scan_config = {
-        .ssid = NULL,
-        .bssid = NULL,
-        .channel = 0,
-        .show_hidden = true,
-        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-        .scan_time = {
-            .active = { .min = 1000, .max = 1000 },
-            .passive = 500
-        }
-    };
-    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
-    uint16_t ap_count = 0;
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-    ESP_LOGI(TAG, "Redes encontradas: %d", ap_count);
-    if (ap_count > 0) {
-        wifi_ap_record_t *ap_records = malloc(sizeof(wifi_ap_record_t) * ap_count);
-        ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
-        for (int i = 0; i < ap_count; i++) {
-            ESP_LOGI(TAG, "SSID: %s, RSSI: %d, Auth: %s (%d)", 
-                     ap_records[i].ssid, ap_records[i].rssi, 
-                     auth_mode_to_string(ap_records[i].authmode), ap_records[i].authmode);
-            if (strcmp((char*)ap_records[i].ssid, "STARLINK") == 0) {
-                ESP_LOGI(TAG, ">>> Router STARLINK detectado con autenticación %s", auth_mode_to_string(ap_records[i].authmode));
-            }
-        }
-        free(ap_records);
-    } else {
-        ESP_LOGW(TAG, "No se encontraron redes. ¿El WiFi está activo?");
-    }
 
     // Esperar a que la STA se conecte y obtenga IP (máximo 30 segundos)
     int retry = 0;
@@ -296,12 +251,11 @@ void wifi_init_softap_sta(void) {
     }
     if (!sta_got_ip) {
         ESP_LOGE(TAG, "No se pudo conectar al router STARLINK. Verifique SSID y password, y que la banda sea 2.4 GHz.");
-        // Continuar sin internet, pero el AP sigue activo
     } else {
         ESP_LOGI(TAG, "Conexión a STARLINK establecida con éxito");
     }
 
-    // Habilitar NAT (IP Forwarding)
+    // Habilitar NAT
     esp_netif_t *netif_ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (netif_ap && netif_sta) {
@@ -314,15 +268,12 @@ void wifi_init_softap_sta(void) {
     initialize_dns_blocking();
 }
 
-// Hook personalizado para filtrar DNS
 void lwip_hook_dns_ext_resolve(const char *name, ip_addr_t *addr) {
     ESP_LOGI(TAG, "DNS Hook called for domain: %s", name ? name : "(null)");
-    
     if (name == NULL) {
         ESP_LOGW(TAG, "Domain name is NULL, skipping");
         return;
     }
-    
     if (check_and_block_domain(name)) {
         ip_addr_set_zero(addr);
         ESP_LOGI(TAG, ">>> BLOQUEADO: %s (respuesta 0.0.0.0)", name);
@@ -334,7 +285,6 @@ void lwip_hook_dns_ext_resolve(const char *name, ip_addr_t *addr) {
 void app_main(void) {
     nvs_init();
     wifi_init_softap_sta();
-
     while (1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
