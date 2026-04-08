@@ -19,8 +19,7 @@ Los binarios disponibles están actualizados.
 | `0xE000`  | `vacío`               |
 | `0x10000` | `softap_sta.bin`      |
 
-
-# Guía de compilación y configuración WiFi
+### Guía de compilación y configuración WiFi
 
 Para compilar este proyecto, utilice el entorno de desarrollo **ESP‑IDF** disponible en el siguiente enlace oficial:
 
