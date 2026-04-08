@@ -22,8 +22,11 @@
 
 static const char *TAG = "ESP32_ROUTER";
 
+// Variables de estado para la conexión STA
+static bool sta_connected = false;
+static bool sta_got_ip = false;
+
 // --- Lista de bloqueo con comodines (*) ---
-// Ahora calculamos el número automáticamente para evitar errores
 const char* blocked_domains[] = {
     "f01.ps4.update.playstation.net",
     "h01.ps4.update.playstation.net",
@@ -114,8 +117,22 @@ const char* blocked_domains[] = {
     "fuk.net.playstation.net",
     "fus.net.playstation.net"
 };
-// Número automático de elementos
 #define NUM_BLOCKED_DOMAINS (sizeof(blocked_domains) / sizeof(blocked_domains[0]))
+
+// Función auxiliar para convertir modo de autenticación a cadena
+static const char* auth_mode_to_string(wifi_auth_mode_t mode) {
+    switch (mode) {
+        case WIFI_AUTH_OPEN: return "OPEN";
+        case WIFI_AUTH_WEP: return "WEP";
+        case WIFI_AUTH_WPA_PSK: return "WPA_PSK";
+        case WIFI_AUTH_WPA2_PSK: return "WPA2_PSK";
+        case WIFI_AUTH_WPA_WPA2_PSK: return "WPA_WPA2_PSK";
+        case WIFI_AUTH_WPA3_PSK: return "WPA3_PSK";
+        case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2_WPA3_PSK";
+        case WIFI_AUTH_WAPI_PSK: return "WAPI_PSK";
+        default: return "UNKNOWN";
+    }
+}
 
 // Función para comprobar coincidencia con comodín (*)
 bool matches_pattern(const char *domain, const char *pattern) {
@@ -139,21 +156,20 @@ bool matches_pattern(const char *domain, const char *pattern) {
            (*d == '\0' && *p == '\0');
 }
 
-// Esta función se llamará desde un hook de DNS (más abajo)
+// Función de bloqueo
 bool check_and_block_domain(const char *name) {
     for (int i = 0; i < NUM_BLOCKED_DOMAINS; i++) {
         if (matches_pattern(name, blocked_domains[i])) {
             ESP_LOGI(TAG, "Bloqueado: %s (coincide con %s)", name, blocked_domains[i]);
-            return true; // Bloquear
+            return true;
         }
     }
     ESP_LOGI(TAG, "Permitido: %s", name);
-    return false; // No bloquear
+    return false;
 }
 
-// Inicializar DNS con servidores normales (el bloqueo se hará por hook)
+// Inicializar DNS
 void initialize_dns_blocking() {
-    // Configurar servidores DNS públicos
     ip_addr_t dns1, dns2;
     ipaddr_aton("8.8.8.8", &dns1);
     ipaddr_aton("8.8.4.4", &dns2);
@@ -172,10 +188,33 @@ void nvs_init() {
     ESP_ERROR_CHECK(ret);
 }
 
+// Manejador de eventos WiFi
+static void event_handler(void* arg, esp_event_base_t event_base,
+                          int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
+        sta_connected = true;
+        ESP_LOGI(TAG, "STA conectado al router STARLINK");
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        sta_connected = false;
+        sta_got_ip = false;
+        ESP_LOGI(TAG, "STA desconectado del router, reintentando...");
+        esp_wifi_connect();
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "STA obtuvo IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        sta_got_ip = true;
+    }
+}
+
 // Configuración WiFi como Station + AP
 void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Registrar manejador de eventos
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
 
     esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
@@ -183,17 +222,18 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station (conexión a internet)
+    // Configuración Station (conexión a internet) - ¡VERIFICA SSID Y PASSWORD!
     wifi_config_t sta_config = {
         .sta = {
-            .ssid = "STARLINK",     // ← CAMBIA por el SSID de tu router
-            .password = "Pauli2807", // ← CAMBIA por la contraseña de tu router
+            .ssid = "STARLINK",
+            .password = "Pauli2807",
             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
+    ESP_LOGI(TAG, "Autenticación para conectarse a STARLINK: %s", auth_mode_to_string(sta_config.sta.threshold.authmode));
 
-    // Configuración Access Point (red que crea el ESP32)
+    // Configuración Access Point
     wifi_config_t ap_config = {
         .ap = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -205,9 +245,23 @@ void wifi_init_softap_sta(void) {
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+    ESP_LOGI(TAG, "Autenticación para la red ProtectorPS4: %s", auth_mode_to_string(ap_config.ap.authmode));
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "WiFi AP (%s) y STA iniciados", EXAMPLE_ESP_WIFI_SSID);
+    ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
+
+    // Esperar a que la STA se conecte y obtenga IP (máximo 30 segundos)
+    int retry = 0;
+    while (!sta_got_ip && retry < 30) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        retry++;
+    }
+    if (!sta_got_ip) {
+        ESP_LOGE(TAG, "No se pudo conectar al router STARLINK. Verifique SSID y password.");
+        // Continuar sin internet, pero el AP sigue activo
+    } else {
+        ESP_LOGI(TAG, "Conexión a STARLINK establecida con éxito");
+    }
 
     // Habilitar NAT (IP Forwarding)
     esp_netif_t *netif_ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -223,12 +277,21 @@ void wifi_init_softap_sta(void) {
 }
 
 // Hook personalizado para filtrar DNS (se llama antes de resolver)
-// Esta función debe ser habilitada en menuconfig (LWIP_HOOK_IP4_ROUTE o similar)
-// Pero para que compile, la dejamos definida. Luego te explico cómo activarla.
 void lwip_hook_dns_ext_resolve(const char *name, ip_addr_t *addr) {
+    ESP_LOGI(TAG, "DNS Hook called for domain: %s", name ? name : "(null)");
+    
+    if (name == NULL) {
+        ESP_LOGW(TAG, "Domain name is NULL, skipping");
+        return;
+    }
+    
     if (check_and_block_domain(name)) {
-        // Si está bloqueado, devolvemos una dirección inválida (0.0.0.0)
+        // Bloqueado: asignar dirección 0.0.0.0
         ip_addr_set_zero(addr);
+        ESP_LOGI(TAG, ">>> BLOQUEADO: %s (respuesta 0.0.0.0)", name);
+    } else {
+        // Permitido: no modificar addr, se resolverá normalmente
+        ESP_LOGI(TAG, ">>> PERMITIDO: %s (resolución normal)", name);
     }
 }
 
