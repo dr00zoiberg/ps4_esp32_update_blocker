@@ -5,7 +5,7 @@ Utilice su módulo ESP32 para obtener conectividad a Internet sin necesidad de a
 
 ## Binarios
 
-Emplee los binarios disponibles en el siguiente sitio web:  
+Emplee los binarios en el siguiente sitio web:  
 [https://esptool.spacehuhn.com/](https://esptool.spacehuhn.com/)
 
 ## Direcciones de memoria y archivos correspondientes
@@ -38,7 +38,7 @@ A través del monitor serie podrá observar en tiempo real qué direcciones est�
 ## Reporte de direcciones no bloqueadas
 
 Si durante el monitoreo detecta direcciones que deberían estar bloqueadas pero no lo están, se solicita que abra un **issue** en el repositorio para añadir dicha dirección a la lista de bloqueo.
-Aviso importante
 
-El uso de este software es bajo su exclusiva responsabilidad. 
-El código fuente ubicado en la carpeta "src" podría no estar actualizado.
+## Aviso importante
+
+El uso de este software es bajo su exclusiva responsabilidad. El código fuente ubicado en la carpeta `src` podría no estar actualizado.
