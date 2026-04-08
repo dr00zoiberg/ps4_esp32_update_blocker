@@ -22,7 +22,7 @@ Los binarios disponibles están actualizados.
 ## Configuración de la red Wi-Fi
 
 Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros.  
-**Use esta red para conectarse a su PS4.**
+** **Use esta red para conectarse a su PS4.** **
 
 - **Nombre de la red (SSID):** `ProtectorPS4`
 - **Contraseña:** `seguridad123`
@@ -41,4 +41,4 @@ Si durante el monitoreo detecta direcciones que deberían estar bloqueadas pero 
 
 ## Aviso importante
 
-El uso de este software es bajo su exclusiva responsabilidad. El código fuente ubicado en la carpeta `src` podría no estar actualizado.
+El uso de este software es bajo su exclusiva responsabilidad. El código fuente ubicado en la carpeta "`src`" podría no estar actualizado.
