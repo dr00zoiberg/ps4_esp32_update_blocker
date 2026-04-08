@@ -403,8 +403,6 @@ void wifi_init_softap_sta(void) {
     // Habilitar NAT (IP Forwarding)
     esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (netif_ap && netif_sta) {
-        esp_netif_set_ip_forwarding(netif_ap, true);
-        esp_netif_set_ip_forwarding(netif_sta, true);
         esp_netif_napt_enable(netif_ap);
         ESP_LOGI(TAG, "NAT habilitado entre AP y STA, forwarding activado");
     } else {
