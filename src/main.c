@@ -347,13 +347,13 @@ void wifi_init_softap_sta(void) {
     // Configuración Station
     wifi_config_t sta_config = {
         .sta = {
-            .ssid = "STARLINK",
-            .password = "Pauli2807",
+            .ssid = "nombre-wifi",
+            .password = "password-wifi",
             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-    ESP_LOGI(TAG, "Autenticación para conectarse a STARLINK: %s", auth_mode_to_string(sta_config.sta.threshold.authmode));
+    ESP_LOGI(TAG, "Autenticación para conectarse a Router: %s", auth_mode_to_string(sta_config.sta.threshold.authmode));
 
     // Configuración Access Point
     wifi_config_t ap_config = {
@@ -382,7 +382,7 @@ void wifi_init_softap_sta(void) {
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
+    ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando al Router ...", EXAMPLE_ESP_WIFI_SSID);
     ESP_ERROR_CHECK(esp_wifi_connect());
 
     // Esperar conexión STA
@@ -392,9 +392,9 @@ void wifi_init_softap_sta(void) {
         retry++;
     }
     if (!sta_got_ip) {
-        ESP_LOGE(TAG, "No se pudo conectar al router STARLINK. Verifique SSID y password, y que la banda sea 2.4 GHz.");
+        ESP_LOGE(TAG, "No se pudo conectar al router . Verifique SSID y password, y que la banda sea 2.4 GHz.");
     } else {
-        ESP_LOGI(TAG, "Conexión a STARLINK establecida con éxito");
+        ESP_LOGI(TAG, "Conexión a Router establecida con éxito");
     }
 
     // Habilitar NAT
