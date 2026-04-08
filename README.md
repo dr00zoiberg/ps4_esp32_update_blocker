@@ -3,10 +3,14 @@
 Utilice su módulo ESP32 para obtener conectividad a Internet sin necesidad de actualizar su consola ni sus programas.  
 *(Probado con la versión de firmware v12.50)*
 
+---
+
 ## Binarios
 
 Emplee los binarios en el siguiente sitio web:  
-[https://esptool.spacehuhn.com/](https://esptool.spacehuhn.com/)
+👉 [https://esptool.spacehuhn.com/](https://esptool.spacehuhn.com/)
+
+---
 
 ## Direcciones de memoria y archivos correspondientes
 
@@ -19,20 +23,23 @@ Los binarios disponibles están actualizados.
 | `0xE000`  | `vacío`               |
 | `0x10000` | `softap_sta.bin`      |
 
-### Guía de compilación y configuración WiFi
+---
+
+## Guía de compilación y configuración WiFi
 
 Para compilar este proyecto, utilice el entorno de desarrollo **ESP‑IDF** disponible en el siguiente enlace oficial:
 
 🔗 [https://idf.espressif.com/](https://idf.espressif.com/)
 
+---
+
 ## Configuración necesaria
 
-Antes de compilar, debe modificar las credenciales de la red WiFi en el código fuente. Busque las siguientes variables y sustituya los valores de ejemplo por los suyos:
+Antes de compilar, debe modificar las credenciales de la red WiFi en el código fuente. Busque las siguientes variables y sustituya los valores de ejemplo por los suyos:  
+*(líneas 350, 351 del código fuente)*
 
-`
 .ssid = "nombre-wifi",
 .password = "password-wifi"
-`
 
 Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros.  
 ** **Use esta red para conectarse a su PS4.** **
