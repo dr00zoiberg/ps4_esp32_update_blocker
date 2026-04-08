@@ -10,7 +10,7 @@ Emplee los binarios disponibles en el siguiente sitio web:
 
 ## Direcciones de memoria y archivos correspondientes
 
-> Los binarios disponibles están actualizados.
+Los binarios disponibles están actualizados.
 
 | Dirección | Archivo               |
 |-----------|-----------------------|
