@@ -224,12 +224,12 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station (conexión a internet)
+    // Configuración Station (conexión a internet) - AHORA CON WPA2_PSK (coincide con el router)
     wifi_config_t sta_config = {
         .sta = {
             .ssid = "STARLINK",
             .password = "Pauli2807",
-            .threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK,  // Puedes cambiarlo a WPA2_WPA3_PSK si el router lo requiere
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,   // Cambiado a WPA2_PSK
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
@@ -242,7 +242,7 @@ void wifi_init_softap_sta(void) {
             .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .password = EXAMPLE_ESP_WIFI_PASS,
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .authmode = WIFI_AUTH_WPA2_WPA3_PSK,
+            .authmode = WIFI_AUTH_WPA_WPA2_PSK,
             .max_connection = EXAMPLE_MAX_STA_CONN,
         },
     };
@@ -252,7 +252,10 @@ void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
 
-    // Escaneo de redes WiFi (para diagnosticar visibilidad y autenticación)
+    // INICIAR EXPLÍCITAMENTE LA CONEXIÓN STA
+    ESP_ERROR_CHECK(esp_wifi_connect());
+
+    // Escaneo de redes WiFi (para diagnóstico)
     ESP_LOGI(TAG, "Iniciando escaneo de redes WiFi (duración ~1s)...");
     wifi_scan_config_t scan_config = {
         .ssid = NULL,
@@ -260,7 +263,10 @@ void wifi_init_softap_sta(void) {
         .channel = 0,
         .show_hidden = true,
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-        .scan_time = { .active = 1000, .passive = 500 }
+        .scan_time = {
+            .active = { .min = 1000, .max = 1000 },
+            .passive = 500
+        }
     };
     ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
     uint16_t ap_count = 0;
@@ -273,15 +279,8 @@ void wifi_init_softap_sta(void) {
             ESP_LOGI(TAG, "SSID: %s, RSSI: %d, Auth: %s (%d)", 
                      ap_records[i].ssid, ap_records[i].rssi, 
                      auth_mode_to_string(ap_records[i].authmode), ap_records[i].authmode);
-            // Verificar si es nuestro router
             if (strcmp((char*)ap_records[i].ssid, "STARLINK") == 0) {
                 ESP_LOGI(TAG, ">>> Router STARLINK detectado con autenticación %s", auth_mode_to_string(ap_records[i].authmode));
-                // Si el modo de autenticación detectado es diferente al configurado, sugerir cambio
-                if (ap_records[i].authmode != sta_config.sta.threshold.authmode) {
-                    ESP_LOGW(TAG, "¡El router usa %s pero configuraste %s! Cambia threshold.authmode en el código.", 
-                             auth_mode_to_string(ap_records[i].authmode), 
-                             auth_mode_to_string(sta_config.sta.threshold.authmode));
-                }
             }
         }
         free(ap_records);
@@ -315,7 +314,7 @@ void wifi_init_softap_sta(void) {
     initialize_dns_blocking();
 }
 
-// Hook personalizado para filtrar DNS (se llama antes de resolver)
+// Hook personalizado para filtrar DNS
 void lwip_hook_dns_ext_resolve(const char *name, ip_addr_t *addr) {
     ESP_LOGI(TAG, "DNS Hook called for domain: %s", name ? name : "(null)");
     
@@ -325,11 +324,9 @@ void lwip_hook_dns_ext_resolve(const char *name, ip_addr_t *addr) {
     }
     
     if (check_and_block_domain(name)) {
-        // Bloqueado: asignar dirección 0.0.0.0
         ip_addr_set_zero(addr);
         ESP_LOGI(TAG, ">>> BLOQUEADO: %s (respuesta 0.0.0.0)", name);
     } else {
-        // Permitido: no modificar addr, se resolverá normalmente
         ESP_LOGI(TAG, ">>> PERMITIDO: %s (resolución normal)", name);
     }
 }
