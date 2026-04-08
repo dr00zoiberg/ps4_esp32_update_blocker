@@ -36,6 +36,7 @@ const char* blocked_domains[] = {
     "*.*.playstation.*.*",
     "*.playstation.*.*",
 	"playstation.com",
+	"ps4updptl.us.np.community.playstation.net",
 	"ps4-system.sec.e1-np.dl.playstation.net",
     "ps4-system.sec.sp-int.dl.playstation.net",
     "ps4-system.sec.np.dl.playstation.net",
