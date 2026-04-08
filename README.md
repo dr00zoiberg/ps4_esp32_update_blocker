@@ -23,14 +23,15 @@ Los binarios disponibles están actualizados.
 
 Para compilar este proyecto, utilice el entorno de desarrollo **ESP‑IDF** disponible en el siguiente enlace oficial:
 
-🔗 [https://idf.espressif.com/](https://idf.espressif.com/)
+👉  [https://idf.espressif.com/](https://idf.espressif.com/)
 
 ## Configuración necesaria
 
 Antes de compilar, debe modificar las credenciales de la red WiFi en el código fuente. Busque las siguientes variables y sustituya los valores de ejemplo por los suyos:  
 *(líneas 350, 351 del código fuente)*
 
-.ssid = "nombre-wifi"
+.ssid = "nombre-wifi"  
+
 .password = "password-wifi"
 
 Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros.  
@@ -43,7 +44,7 @@ Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes par
 
 Para visualizar las conexiones permitidas y bloqueadas, utilice el **monitor serie** del **Arduino IDE Legacy 1.8.19**.  
 Puede descargar esta versión desde el sitio oficial:  
-🔗 [https://www.arduino.cc/en/software/](https://www.arduino.cc/en/software/)
+👉 [https://www.arduino.cc/en/software/](https://www.arduino.cc/en/software/)
 
 A través del monitor serie podrá observar en tiempo real qué direcciones están siendo permitidas o bloqueadas por el sistema.
 
