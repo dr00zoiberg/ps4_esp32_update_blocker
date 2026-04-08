@@ -21,7 +21,7 @@ Los binarios disponibles están actualizados.
 
 ## Configuración de la red Wi-Fi
 
-Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros:
+Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros.  
 **Use esta red para conectarse a su PS4.**
 
 - **Nombre de la red (SSID):** `ProtectorPS4`
