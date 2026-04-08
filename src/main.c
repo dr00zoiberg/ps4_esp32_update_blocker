@@ -31,6 +31,21 @@ static bool sta_got_ip = false;
 
 // --- Lista de bloqueo con comodines (*) ---
 const char* blocked_domains[] = {
+    "*.*.*.playstation.*",
+    "*.*.playstation.*",
+    "*.*.playstation.*.*",
+    "*.playstation.*.*",
+	"playstation.com",
+	"ps4updptl.us.np.community.playstation.net",
+	"ps4-system.sec.e1-np.dl.playstation.net",
+    "ps4-system.sec.sp-int.dl.playstation.net",
+    "ps4-system.sec.np.dl.playstation.net",
+	"us.sp-int.stun.playstation.net",
+	"event.api.sp-int.km.playstation.net",
+	"urlconfig.sp-int.api.playstation.com",
+    "gs-sec.ww.sp-int.dl.playstation.net",
+    "event.api.np.km.playstation.net",
+    "ps4updptl.us.sp-int.community.playstation.net",
     "f01.ps4.update.playstation.net",
     "h01.ps4.update.playstation.net",
     "update.playstation.net",
@@ -163,7 +178,7 @@ bool matches_pattern(const char *domain, const char *pattern) {
 bool check_and_block_domain(const char *name) {
     for (int i = 0; i < NUM_BLOCKED_DOMAINS; i++) {
         if (matches_pattern(name, blocked_domains[i])) {
-            ESP_LOGI(TAG, "Bloqueado: %s (coincide con %s)", name, blocked_domains[i]);
+            ESP_LOGI(TAG, "--> Bloqueado: %s (coincide con %s)", name, blocked_domains[i]);
             return true;
         }
     }
@@ -172,9 +187,6 @@ bool check_and_block_domain(const char *name) {
 }
 
 // ==================== SERVIDOR DNS ====================
-// Esta tarea implementa un servidor DNS que escucha en el puerto 53,
-// filtra dominios bloqueados y reenvía consultas no bloqueadas a 8.8.8.8.
-
 #define DNS_SERVER_PORT 53
 #define DNS_UPSTREAM_IP   "8.8.8.8"
 #define DNS_BUFFER_SIZE  512
@@ -205,7 +217,6 @@ static void dns_server_task(void *pvParameters) {
     socklen_t client_len = sizeof(client_addr);
     uint8_t buffer[DNS_BUFFER_SIZE];
 
-    // Configurar socket para upstream
     struct sockaddr_in upstream = {
         .sin_family = AF_INET,
         .sin_port = htons(53)
@@ -224,7 +235,6 @@ static void dns_server_task(void *pvParameters) {
         int qdcount = (query[4] << 8) | query[5];
         if (qdcount == 0) continue;
 
-        // Saltar cabecera (12 bytes)
         uint8_t *p = query + 12;
         char name[256];
         int name_len = 0;
@@ -239,50 +249,39 @@ static void dns_server_task(void *pvParameters) {
         }
         name[name_len] = '\0';
         p += 1; // saltar el 0 final
-        p += 4; // saltar QTYPE y QCLASS (4 bytes)
+        p += 4; // saltar QTYPE y QCLASS
 
         ESP_LOGI(TAG, "Consulta DNS recibida: %s", name);
 
         if (check_and_block_domain(name)) {
-            // Dominio bloqueado: responder con 0.0.0.0 (A record)
-            // Construir respuesta DNS con una dirección IP 0.0.0.0
+            // Dominio bloqueado: responder con 0.0.0.0
             uint8_t response[DNS_BUFFER_SIZE];
             memcpy(response, query, len);
-            // Set QR=1 (respuesta), opcode=0, AA=0, TC=0, RA=0, RCODE=0
-            response[2] |= 0x80;  // QR
-            // Número de respuestas = 1
+            response[2] |= 0x80;
             response[6] = 0;
             response[7] = 1;
-            // Construir la sección de respuesta
             uint8_t *resp = response + len;
-            // Copiar el nombre de la consulta
             uint8_t *name_ptr = query + 12;
             while (*name_ptr != 0) {
                 *resp++ = *name_ptr++;
             }
             *resp++ = 0;
-            // TYPE A (1), CLASS IN (1)
-            *resp++ = 0; *resp++ = 1;
-            *resp++ = 0; *resp++ = 1;
-            // TTL (300 segundos)
-            *resp++ = 0; *resp++ = 0; *resp++ = 1; *resp++ = 0x2c;
-            // RDLENGTH (4)
-            *resp++ = 0; *resp++ = 4;
-            // Dirección 0.0.0.0
-            *resp++ = 0; *resp++ = 0; *resp++ = 0; *resp++ = 0;
+            *resp++ = 0; *resp++ = 1;   // TYPE A
+            *resp++ = 0; *resp++ = 1;   // CLASS IN
+            *resp++ = 0; *resp++ = 0; *resp++ = 1; *resp++ = 0x2c; // TTL 300
+            *resp++ = 0; *resp++ = 4;   // RDLENGTH 4
+            *resp++ = 0; *resp++ = 0; *resp++ = 0; *resp++ = 0; // 0.0.0.0
             int new_len = resp - response;
             sendto(sock, response, new_len, 0, (struct sockaddr*)&client_addr, client_len);
             ESP_LOGI(TAG, "Respuesta DNS bloqueado: 0.0.0.0 para %s", name);
         } else {
-            // Reenviar la consulta al DNS upstream
+            // Reenviar al upstream
             int up_sock = socket(AF_INET, SOCK_DGRAM, 0);
             if (up_sock < 0) {
                 ESP_LOGE(TAG, "No se pudo crear socket upstream");
                 continue;
             }
-            // Enviar la consulta original al upstream
             sendto(up_sock, buffer, len, 0, (struct sockaddr*)&upstream, sizeof(upstream));
-            // Recibir respuesta con timeout
             struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
             setsockopt(up_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             uint8_t up_buffer[DNS_BUFFER_SIZE];
@@ -345,7 +344,7 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station (conexión a internet)
+    // Configuración Station
     wifi_config_t sta_config = {
         .sta = {
             .ssid = "STARLINK",
@@ -370,14 +369,12 @@ void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_LOGI(TAG, "Autenticación para la red ProtectorPS4: %s", auth_mode_to_string(ap_config.ap.authmode));
 
-    // Configurar el DHCP del AP para que entregue la IP del ESP32 como DNS (para que los clientes le consulten)
+    // Configurar DHCP del AP para entregar la IP del ESP32 como DNS
     esp_netif_t *netif_ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (netif_ap) {
-        esp_netif_dns_info_t dns;
-        dns.ip.u_addr.ip4.addr = esp_netif_get_ip_info(netif_ap, NULL) ? 0 : esp_netif_get_ip_info(netif_ap, NULL);
-        // Obtener la IP del AP (192.168.4.1)
         esp_netif_ip_info_t ip_info;
         esp_netif_get_ip_info(netif_ap, &ip_info);
+        esp_netif_dns_info_t dns;
         dns.ip.u_addr.ip4 = ip_info.ip;
         dns.ip.type = IPADDR_TYPE_V4;
         esp_netif_set_dns_info(netif_ap, ESP_NETIF_DNS_MAIN, &dns);
@@ -388,7 +385,7 @@ void wifi_init_softap_sta(void) {
     ESP_LOGI(TAG, "WiFi AP (%s) iniciado, conectando a STARLINK...", EXAMPLE_ESP_WIFI_SSID);
     ESP_ERROR_CHECK(esp_wifi_connect());
 
-    // Esperar a que la STA se conecte y obtenga IP (máximo 30 segundos)
+    // Esperar conexión STA
     int retry = 0;
     while (!sta_got_ip && retry < 30) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -400,7 +397,7 @@ void wifi_init_softap_sta(void) {
         ESP_LOGI(TAG, "Conexión a STARLINK establecida con éxito");
     }
 
-    // Habilitar NAT (IP Forwarding)
+    // Habilitar NAT
     esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (netif_ap && netif_sta) {
         esp_netif_napt_enable(netif_ap);
@@ -413,10 +410,7 @@ void wifi_init_softap_sta(void) {
 void app_main(void) {
     nvs_init();
     wifi_init_softap_sta();
-
-    // Iniciar el servidor DNS en una tarea separada
     xTaskCreate(dns_server_task, "dns_server", 4096, NULL, 5, NULL);
-
     while (1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
