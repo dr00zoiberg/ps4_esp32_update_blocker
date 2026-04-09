@@ -17,43 +17,40 @@
 #include "lwip/lwip_napt.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
-#include "esp_http_server.h"   // Para el servidor web
-#include "cJSON.h"             // Para parsear JSON (opcional, pero facilita)
+#include "esp_http_server.h"
+#include "cJSON.h"
 
 #define EXAMPLE_ESP_WIFI_SSID      "ProtectorPS4"
 #define EXAMPLE_ESP_WIFI_PASS      "seguridad123"
 #define EXAMPLE_ESP_WIFI_CHANNEL   6
 #define EXAMPLE_MAX_STA_CONN       4
 
-// Claves para NVS
 #define NVS_NAMESPACE "storage"
 #define NVS_KEY_SSID   "sta_ssid"
 #define NVS_KEY_PASS   "sta_pass"
 
 static const char *TAG = "ESP32_ROUTER";
 
-// Variables de estado para la conexión STA
 static bool sta_connected = false;
 static bool sta_got_ip = false;
 
-// Variables para almacenar las credenciales leídas de NVS
 static char sta_ssid[32] = {0};
 static char sta_password[64] = {0};
 
-// --- Lista de bloqueo con comodines (*) ---
+// --- Lista de bloqueo (sin cambios) ---
 const char* blocked_domains[] = {
     "*.*.*.playstation.*",
     "*.*.playstation.*",
     "*.*.playstation.*.*",
     "*.playstation.*.*",
-	  "playstation.com",
+	"playstation.com",
   	"ps4updptl.us.np.community.playstation.net",
   	"ps4-system.sec.e1-np.dl.playstation.net",
     "ps4-system.sec.sp-int.dl.playstation.net",
     "ps4-system.sec.np.dl.playstation.net",
-	  "us.sp-int.stun.playstation.net",
-	  "event.api.sp-int.km.playstation.net",
-	  "urlconfig.sp-int.api.playstation.com",
+	"us.sp-int.stun.playstation.net",
+	"event.api.sp-int.km.playstation.net",
+	"urlconfig.sp-int.api.playstation.com",
     "gs-sec.ww.sp-int.dl.playstation.net",
     "event.api.np.km.playstation.net",
     "ps4updptl.us.sp-int.community.playstation.net",
@@ -146,9 +143,9 @@ const char* blocked_domains[] = {
     "fuk.net.playstation.net",
     "fus.net.playstation.net"
 };
+
 #define NUM_BLOCKED_DOMAINS (sizeof(blocked_domains) / sizeof(blocked_domains[0]))
 
-// Función auxiliar para convertir modo de autenticación a cadena
 static const char* auth_mode_to_string(wifi_auth_mode_t mode) {
     switch (mode) {
         case WIFI_AUTH_OPEN: return "OPEN";
@@ -163,7 +160,6 @@ static const char* auth_mode_to_string(wifi_auth_mode_t mode) {
     }
 }
 
-// Función para comprobar coincidencia con comodín (*)
 bool matches_pattern(const char *domain, const char *pattern) {
     const char *d = domain;
     const char *p = pattern;
@@ -185,7 +181,6 @@ bool matches_pattern(const char *domain, const char *pattern) {
            (*d == '\0' && *p == '\0');
 }
 
-// Función de bloqueo
 bool check_and_block_domain(const char *name) {
     for (int i = 0; i < NUM_BLOCKED_DOMAINS; i++) {
         if (matches_pattern(name, blocked_domains[i])) {
@@ -241,7 +236,6 @@ static void dns_server_task(void *pvParameters) {
             continue;
         }
 
-        // Analizar consulta DNS para extraer el nombre
         uint8_t *query = buffer;
         int qdcount = (query[4] << 8) | query[5];
         if (qdcount == 0) continue;
@@ -259,13 +253,12 @@ static void dns_server_task(void *pvParameters) {
             }
         }
         name[name_len] = '\0';
-        p += 1; // saltar el 0 final
-        p += 4; // saltar QTYPE y QCLASS
+        p += 1;
+        p += 4;
 
         ESP_LOGI(TAG, "Consulta DNS recibida: %s", name);
 
         if (check_and_block_domain(name)) {
-            // Dominio bloqueado: responder con 0.0.0.0
             uint8_t response[DNS_BUFFER_SIZE];
             memcpy(response, query, len);
             response[2] |= 0x80;
@@ -277,16 +270,15 @@ static void dns_server_task(void *pvParameters) {
                 *resp++ = *name_ptr++;
             }
             *resp++ = 0;
-            *resp++ = 0; *resp++ = 1;   // TYPE A
-            *resp++ = 0; *resp++ = 1;   // CLASS IN
-            *resp++ = 0; *resp++ = 0; *resp++ = 1; *resp++ = 0x2c; // TTL 300
-            *resp++ = 0; *resp++ = 4;   // RDLENGTH 4
-            *resp++ = 0; *resp++ = 0; *resp++ = 0; *resp++ = 0; // 0.0.0.0
+            *resp++ = 0; *resp++ = 1;
+            *resp++ = 0; *resp++ = 1;
+            *resp++ = 0; *resp++ = 0; *resp++ = 1; *resp++ = 0x2c;
+            *resp++ = 0; *resp++ = 4;
+            *resp++ = 0; *resp++ = 0; *resp++ = 0; *resp++ = 0;
             int new_len = resp - response;
             sendto(sock, response, new_len, 0, (struct sockaddr*)&client_addr, client_len);
             ESP_LOGI(TAG, "Respuesta DNS bloqueado: 0.0.0.0 para %s", name);
         } else {
-            // Reenviar al upstream
             int up_sock = socket(AF_INET, SOCK_DGRAM, 0);
             if (up_sock < 0) {
                 ESP_LOGE(TAG, "No se pudo crear socket upstream");
@@ -310,7 +302,7 @@ static void dns_server_task(void *pvParameters) {
 }
 // ======================================================
 
-// ==================== NVS PARA CONFIGURACIÓN ====================
+// ==================== NVS ====================
 void save_sta_config_to_nvs(const char *ssid, const char *password) {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
@@ -318,10 +310,8 @@ void save_sta_config_to_nvs(const char *ssid, const char *password) {
         ESP_LOGE(TAG, "Error abriendo NVS: %s", esp_err_to_name(err));
         return;
     }
-    err = nvs_set_str(my_handle, NVS_KEY_SSID, ssid);
-    if (err != ESP_OK) ESP_LOGE(TAG, "Error guardando SSID");
-    err = nvs_set_str(my_handle, NVS_KEY_PASS, password);
-    if (err != ESP_OK) ESP_LOGE(TAG, "Error guardando password");
+    nvs_set_str(my_handle, NVS_KEY_SSID, ssid);
+    nvs_set_str(my_handle, NVS_KEY_PASS, password);
     nvs_commit(my_handle);
     nvs_close(my_handle);
     ESP_LOGI(TAG, "Configuración STA guardada: SSID=%s", ssid);
@@ -338,107 +328,112 @@ void load_sta_config_from_nvs(void) {
     }
     size_t len;
     len = sizeof(sta_ssid);
-    err = nvs_get_str(my_handle, NVS_KEY_SSID, sta_ssid, &len);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "No se encontró SSID en NVS, dejando vacío");
+    if (nvs_get_str(my_handle, NVS_KEY_SSID, sta_ssid, &len) != ESP_OK) {
         sta_ssid[0] = '\0';
     }
     len = sizeof(sta_password);
-    err = nvs_get_str(my_handle, NVS_KEY_PASS, sta_password, &len);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "No se encontró password en NVS, dejando vacío");
+    if (nvs_get_str(my_handle, NVS_KEY_PASS, sta_password, &len) != ESP_OK) {
         sta_password[0] = '\0';
     }
     nvs_close(my_handle);
     ESP_LOGI(TAG, "Configuración STA cargada: SSID=%s", sta_ssid);
 }
+// ======================================================
 
 // ==================== SERVIDOR WEB ====================
 static httpd_handle_t server = NULL;
 
-/* HTML de la página de configuración */
-static const char* config_html = 
-"<!DOCTYPE html>"
-"<html>"
-"<head>"
-"<meta charset='UTF-8'>"
-"<meta name='viewport' content='width=device-width, initial-scale=1'>"
-"<title>Configuración Router</title>"
-"<style>"
-"body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }"
-".container { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 500px; width: 100%; text-align: center; }"
-"h1 { color: #333; margin-bottom: 10px; font-size: 28px; }"
-".sub { color: #666; margin-bottom: 30px; font-size: 14px; }"
-".input-group { margin-bottom: 20px; text-align: left; }"
-"label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }"
-"input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; transition: 0.3s; }"
-"input:focus { border-color: #667eea; outline: none; }"
-"button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 30px; font-size: 18px; border-radius: 30px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; margin-top: 10px; }"
-"button:hover { transform: scale(1.02); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }"
-".status { margin-top: 20px; padding: 10px; border-radius: 10px; display: none; }"
-".status.success { background: #d4edda; color: #155724; display: block; }"
-".status.error { background: #f8d7da; color: #721c24; display: block; }"
-"footer { margin-top: 30px; font-size: 12px; color: #aaa; }"
-"</style>"
-"</head>"
-"<body>"
-"<div class='container'>"
-"<h1>📡 Configuración Router</h1>"
-"<div class='sub'>Agrega tu nombre WiFi y password para tener internet en tu PS4</div>"
-"<form id='configForm'>"
-"<div class='input-group'>"
-"<label>🌐 Nombre de la red (SSID)</label>"
-"<input type='text' id='ssid' placeholder='Ej: MiFibra-2.4G' required>"
-"</div>"
-"<div class='input-group'>"
-"<label>🔑 Contraseña</label>"
-"<input type='password' id='password' placeholder='Contraseña del router'>"
-"</div>"
-"<button type='submit'>Conectar</button>"
-"</form>"
-"<div id='status' class='status'></div>"
-"<footer>Luego conéctate a la red <strong>ProtectorPS4</strong> con contraseña <strong>seguridad123</strong></footer>"
-"</div>"
-"<script>"
-"document.getElementById('configForm').addEventListener('submit', async (e) => {"
-"  e.preventDefault();"
-"  const ssid = document.getElementById('ssid').value;"
-"  const password = document.getElementById('password').value;"
-"  const statusDiv = document.getElementById('status');"
-"  statusDiv.className = 'status';"
-"  statusDiv.style.display = 'block';"
-"  statusDiv.textContent = 'Conectando...';"
-"  try {"
-"    const response = await fetch('/config', {"
-"      method: 'POST',"
-"      headers: { 'Content-Type': 'application/json' },"
-"      body: JSON.stringify({ ssid, password })"
-"    });"
-"    const result = await response.json();"
-"    if (result.success) {"
-"      statusDiv.className = 'status success';"
-"      statusDiv.textContent = '✅ ¡Configuración guardada! El ESP32 se reconectará en unos segundos. Ahora deberías tener internet en tu PS4.';"
-"    } else {"
-"      statusDiv.className = 'status error';"
-"      statusDiv.textContent = '❌ Error: ' + (result.message || 'No se pudo guardar');"
-"    }"
-"  } catch (err) {"
-"    statusDiv.className = 'status error';"
-"    statusDiv.textContent = '❌ Error de conexión con el ESP32';"
-"  }"
-"});"
-"</script>"
-"</body>"
-"</html>";
-
-/* Manejador para GET / */
+/* Manejador GET: genera el HTML con los valores actuales precargados */
 static esp_err_t config_get_handler(httpd_req_t *req) {
+    // Escapar caracteres especiales para el HTML (evita inyección)
+    char ssid_escaped[128] = {0};
+    char pass_escaped[128] = {0};
+    strncpy(ssid_escaped, sta_ssid, sizeof(ssid_escaped) - 1);
+    strncpy(pass_escaped, sta_password, sizeof(pass_escaped) - 1);
+    // Escapar comillas dobles (por si acaso)
+    for (char *p = ssid_escaped; *p; p++) if (*p == '"') *p = '&quot;';
+    for (char *p = pass_escaped; *p; p++) if (*p == '"') *p = '&quot;';
+
+    char html[4096];
+    snprintf(html, sizeof(html),
+        "<!DOCTYPE html>"
+        "<html>"
+        "<head>"
+        "<meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>Configuración Router</title>"
+        "<style>"
+        "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }"
+        ".container { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 500px; width: 100%%; text-align: center; }"
+        "h1 { color: #333; margin-bottom: 10px; font-size: 28px; }"
+        ".sub { color: #666; margin-bottom: 30px; font-size: 14px; }"
+        ".input-group { margin-bottom: 20px; text-align: left; }"
+        "label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }"
+        "input { width: 100%%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; transition: 0.3s; }"
+        "input:focus { border-color: #667eea; outline: none; }"
+        "button { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; border: none; padding: 12px 30px; font-size: 18px; border-radius: 30px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; margin-top: 10px; }"
+        "button:hover { transform: scale(1.02); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }"
+        ".status { margin-top: 20px; padding: 10px; border-radius: 10px; display: none; }"
+        ".status.success { background: #d4edda; color: #155724; display: block; }"
+        ".status.error { background: #f8d7da; color: #721c24; display: block; }"
+        "</style>"
+        "</head>"
+        "<body>"
+        "<div class='container'>"
+        "<h1>📡 Configuración Router</h1>"
+        "<div class='sub'>Agrega tu nombre WiFi y password para tener internet en tu PS4</div>"
+        "<form id='configForm'>"
+        "<div class='input-group'>"
+        "<label>🌐 Nombre de la red (SSID)</label>"
+        "<input type='text' id='ssid' placeholder='Ej: MiFibra-2.4G' value=\"%s\" required>"
+        "</div>"
+        "<div class='input-group'>"
+        "<label>🔑 Contraseña</label>"
+        "<input type='password' id='password' placeholder='Contraseña del router' value=\"%s\">"
+        "</div>"
+        "<button type='submit'>Conectar</button>"
+        "</form>"
+        "<div id='status' class='status'></div>"
+        "</div>"
+        "<script>"
+        "document.getElementById('configForm').addEventListener('submit', async (e) => {"
+        "  e.preventDefault();"
+        "  const ssid = document.getElementById('ssid').value;"
+        "  const password = document.getElementById('password').value;"
+        "  const statusDiv = document.getElementById('status');"
+        "  statusDiv.className = 'status';"
+        "  statusDiv.style.display = 'block';"
+        "  statusDiv.textContent = 'Conectando...';"
+        "  try {"
+        "    const response = await fetch('/config', {"
+        "      method: 'POST',"
+        "      headers: { 'Content-Type': 'application/json' },"
+        "      body: JSON.stringify({ ssid, password })"
+        "    });"
+        "    const result = await response.json();"
+        "    if (result.success) {"
+        "      statusDiv.className = 'status success';"
+        "      statusDiv.textContent = '✅ ¡Configuración guardada! El ESP32 se reconectará en unos segundos. Ahora deberías tener internet en tu PS4.';"
+        "    } else {"
+        "      statusDiv.className = 'status error';"
+        "      statusDiv.textContent = '❌ Error: ' + (result.message || 'No se pudo guardar');"
+        "    }"
+        "  } catch (err) {"
+        "    statusDiv.className = 'status error';"
+        "    statusDiv.textContent = '❌ Error de conexión con el ESP32';"
+        "  }"
+        "});"
+        "</script>"
+        "</body>"
+        "</html>",
+        ssid_escaped, pass_escaped);
+
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, config_html, strlen(config_html));
+    httpd_resp_send(req, html, strlen(html));
     return ESP_OK;
 }
 
-/* Manejador para POST /config (recibe JSON) */
+/* Manejador POST /config */
 static esp_err_t config_post_handler(httpd_req_t *req) {
     char buffer[256];
     int ret = httpd_req_recv(req, buffer, sizeof(buffer) - 1);
@@ -463,15 +458,12 @@ static esp_err_t config_post_handler(httpd_req_t *req) {
     const char *new_ssid = ssid_json->valuestring;
     const char *new_pass = pass_json->valuestring;
     
-    // Guardar en NVS
     save_sta_config_to_nvs(new_ssid, new_pass);
-    // Actualizar variables globales
     strncpy(sta_ssid, new_ssid, sizeof(sta_ssid) - 1);
     strncpy(sta_password, new_pass, sizeof(sta_password) - 1);
     sta_ssid[sizeof(sta_ssid)-1] = '\0';
     sta_password[sizeof(sta_password)-1] = '\0';
     
-    // Forzar reconexión de la STA
     esp_wifi_disconnect();
     wifi_config_t sta_config = {
         .sta = {
@@ -492,7 +484,6 @@ static esp_err_t config_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-/* Iniciar servidor web en la IP del AP (192.168.4.1) */
 static void start_web_server(void) {
     httpd_handle_t h_server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -500,19 +491,9 @@ static void start_web_server(void) {
     config.stack_size = 4096;
     config.max_uri_handlers = 8;
     if (httpd_start(&h_server, &config) == ESP_OK) {
-        httpd_uri_t uri_get = {
-            .uri = "/",
-            .method = HTTP_GET,
-            .handler = config_get_handler,
-            .user_ctx = NULL
-        };
+        httpd_uri_t uri_get = { .uri = "/", .method = HTTP_GET, .handler = config_get_handler, .user_ctx = NULL };
         httpd_register_uri_handler(h_server, &uri_get);
-        httpd_uri_t uri_post = {
-            .uri = "/config",
-            .method = HTTP_POST,
-            .handler = config_post_handler,
-            .user_ctx = NULL
-        };
+        httpd_uri_t uri_post = { .uri = "/config", .method = HTTP_POST, .handler = config_post_handler, .user_ctx = NULL };
         httpd_register_uri_handler(h_server, &uri_post);
         server = h_server;
         ESP_LOGI(TAG, "Servidor web iniciado en http://192.168.4.1/");
@@ -522,7 +503,6 @@ static void start_web_server(void) {
 }
 // ======================================================
 
-// Inicializar NVS
 void nvs_init() {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -532,7 +512,6 @@ void nvs_init() {
     ESP_ERROR_CHECK(ret);
 }
 
-// Manejador de eventos WiFi
 static void event_handler(void* arg, esp_event_base_t event_base,
                           int32_t event_id, void* event_data)
 {
@@ -553,7 +532,6 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-// Configuración WiFi como Station + AP (ahora usando credenciales desde NVS)
 void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -567,7 +545,6 @@ void wifi_init_softap_sta(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Configuración Station con credenciales cargadas de NVS
     wifi_config_t sta_config = {
         .sta = {
             .ssid = "",
@@ -575,13 +552,10 @@ void wifi_init_softap_sta(void) {
             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
-    // Copiar las credenciales leídas (pueden estar vacías si es primera vez)
     memcpy(sta_config.sta.ssid, sta_ssid, sizeof(sta_ssid));
     memcpy(sta_config.sta.password, sta_password, sizeof(sta_password));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-    ESP_LOGI(TAG, "Autenticación para conectarse a Router: %s", auth_mode_to_string(sta_config.sta.threshold.authmode));
 
-    // Configuración Access Point (sin cambios)
     wifi_config_t ap_config = {
         .ap = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -593,9 +567,7 @@ void wifi_init_softap_sta(void) {
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-    ESP_LOGI(TAG, "Autenticación para la red ProtectorPS4: %s", auth_mode_to_string(ap_config.ap.authmode));
 
-    // Configurar DHCP del AP para entregar la IP del ESP32 como DNS
     esp_netif_t *netif_ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (netif_ap) {
         esp_netif_ip_info_t ip_info;
@@ -610,15 +582,13 @@ void wifi_init_softap_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "WiFi AP (%s) iniciado", EXAMPLE_ESP_WIFI_SSID);
     
-    // Solo intentar conectar si hay SSID configurado
     if (strlen(sta_ssid) > 0) {
         ESP_LOGI(TAG, "Conectando al router guardado...");
         ESP_ERROR_CHECK(esp_wifi_connect());
     } else {
-        ESP_LOGW(TAG, "No hay SSID configurado en NVS. Por favor visita http://192.168.4.1/ para configurar.");
+        ESP_LOGW(TAG, "No hay SSID configurado. Visita http://192.168.4.1/ para configurar.");
     }
 
-    // Esperar conexión STA (solo si hay credenciales)
     if (strlen(sta_ssid) > 0) {
         int retry = 0;
         while (!sta_got_ip && retry < 30) {
@@ -626,27 +596,26 @@ void wifi_init_softap_sta(void) {
             retry++;
         }
         if (!sta_got_ip) {
-            ESP_LOGE(TAG, "No se pudo conectar al router . Verifique SSID y password, y que la banda sea 2.4 GHz.");
+            ESP_LOGE(TAG, "No se pudo conectar al router. Verifique SSID y password.");
         } else {
             ESP_LOGI(TAG, "Conexión a Router establecida con éxito");
         }
     }
 
-    // Habilitar NAT (si ambas interfaces existen)
     esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (netif_ap && netif_sta) {
         esp_netif_napt_enable(netif_ap);
-        ESP_LOGI(TAG, "NAT habilitado entre AP y STA, forwarding activado");
+        ESP_LOGI(TAG, "NAT habilitado entre AP y STA");
     } else {
-        ESP_LOGE(TAG, "Error: No se pudieron obtener las interfaces de red");
+        ESP_LOGE(TAG, "Error: No se pudieron obtener las interfaces");
     }
 }
 
 void app_main(void) {
     nvs_init();
-    load_sta_config_from_nvs();   // Cargar credenciales guardadas
-    wifi_init_softap_sta();       // Iniciar WiFi (AP siempre activo)
-    start_web_server();           // Servir página en 192.168.4.1
+    load_sta_config_from_nvs();
+    wifi_init_softap_sta();
+    start_web_server();
     xTaskCreate(dns_server_task, "dns_server", 4096, NULL, 5, NULL);
     while (1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
