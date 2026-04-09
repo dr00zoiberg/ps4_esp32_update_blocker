@@ -3,10 +3,9 @@
 Utilice su módulo ESP32 para obtener conectividad a Internet sin necesidad de actualizar su consola ni sus programas.  
 *(Probado con la versión de firmware v12.50)*
 
-## Binarios
+## Procedimiento de puesta en marcha
 
-Emplee los binarios en el siguiente sitio web:  
-👉 [https://esptool.spacehuhn.com/](https://esptool.spacehuhn.com/)
+Emplee los binarios a través de la herramienta web disponible en [https://esptool.spacehuhn.com/](https://esptool.spacehuhn.com/) use la tabla para su configuracion una vez el proceso de grabación se haya completado con éxito, se procederá de la siguiente manera:
 
 ## Direcciones de memoria y archivos correspondientes
 
@@ -19,26 +18,23 @@ Los binarios disponibles están actualizados.
 | `0xE000`  | `vacío`               |
 | `0x10000` | `softap_sta.bin`      |
 
+1. Cierre la página web del programador para liberar el puerto serie utilizado.
+2. Presione el botón de reinicio (RESET) en la placa ESP32 o bien desconecte la alimentación durante unos segundos y vuelva a conectarla.
+3. Espere unos instantes hasta que el dispositivo genere la red inalámbrica con el nombre **ProtectorPS4**.
+4. Conéctese a dicha red utilizando la contraseña: **seguridad123**.
+5. Abra un navegador web y acceda a la dirección **192.168.4.1**.
+6. En la página que aparecerá, introduzca el nombre (SSID) y la contraseña de la red WiFi que proporcionará acceso a Internet.
+7. Pulse el botón **Conectar**.
+
+> **Nota:** Este procedimiento solo es necesario la primera vez que se utiliza el dispositivo o cuando se desea cambiar la red de salida. Los parámetros quedarán almacenados de forma persistente en la memoria flash del ESP32.
+
+Una vez realizados estos pasos, el ESP32 dispondrá de conectividad a Internet y podrá ser utilizado para conectar su consola PlayStation 4 usando la red inalámbrica con el nombre **ProtectorPS4** y la contraseña: **seguridad123** , permitiendo la navegación y el uso de servicios en línea sin inconvenientes relacionados con actualizaciones forzadas.
+
 ## Guía de compilación y configuración WiFi
 
 Para compilar este proyecto, utilice el entorno de desarrollo **ESP‑IDF** disponible en el siguiente enlace oficial:
 
 👉  [https://idf.espressif.com/](https://idf.espressif.com/)
-
-## Configuración necesaria
-
-Antes de compilar, debe modificar las credenciales de la red WiFi en el código fuente. Busque las siguientes variables y sustituya los valores de ejemplo por los suyos:  
-*(líneas 350, 351 del código fuente)*
-
-.ssid = "nombre-wifi"  
-
-.password = "password-wifi"
-
-Una vez programado el ESP32, este generará una red Wi-Fi con los siguientes parámetros.  
-** **Use esta red para conectarse a su PS4.** **
-
-- **Nombre de la red (SSID):** `ProtectorPS4`
-- **Contraseña:** `seguridad123`
 
 ## Monitoreo de conexiones
 
