@@ -50,4 +50,4 @@ Si durante el monitoreo detecta direcciones que deberían estar bloqueadas pero 
 
 ## Aviso importante
 
-El uso de este software es bajo su exclusiva responsabilidad. El código fuente ubicado en la carpeta "`src`" main.c .
+El uso de este software es bajo su exclusiva responsabilidad. El código fuente esta ubicado en la carpeta "`src`" main.c .
